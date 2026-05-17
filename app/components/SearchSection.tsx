@@ -19,28 +19,55 @@ export default function SearchSection() {
   const [results, setResults] = useState<Flight[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<"live" | "fallback" | "">("");
 
   const handleSearch = async () => {
     setLoading(true);
     setSearched(true);
-
-    // Simulate network delay
-    await new Promise((r) => setTimeout(r, 800));
+    setSource("");
 
     try {
-      const res = await fetch("/api/flights");
+      // Try real Aviationstack API first
+      const res = await fetch(
+        `/api/search-flights?dep=${encodeURIComponent(from)}&arr=${encodeURIComponent(to)}`
+      );
       const data = await res.json();
 
-      if (
-        from.toLowerCase().includes("bangalore") &&
-        to.toLowerCase().includes("patna")
-      ) {
+      if (data.success && data.data && data.data.length > 0) {
         setResults(data.data);
-      } else {
+        setSource("live");
+        return;
+      }
+
+      // If Aviationstack returned empty or indicated fallback, use hardcoded
+      if (data.fallback || (data.success && data.data?.length === 0)) {
+        throw new Error("Fallback to hardcoded flights");
+      }
+
+      // If IATA resolution failed, show no results
+      if (!data.success && !data.fallback) {
         setResults([]);
+        return;
       }
     } catch {
-      setResults([]);
+      // Fallback to hardcoded flights
+      console.log("[Search] Falling back to hardcoded flights");
+      try {
+        const fallbackRes = await fetch("/api/flights");
+        const fallbackData = await fallbackRes.json();
+
+        if (
+          from.toLowerCase().includes("bangalore") &&
+          to.toLowerCase().includes("patna")
+        ) {
+          setResults(fallbackData.data);
+          setSource("fallback");
+        } else {
+          setResults([]);
+        }
+      } catch {
+        setResults([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -132,6 +159,26 @@ export default function SearchSection() {
         {/* Results */}
         {searched && !loading && (
           <div className="mx-auto mt-10 max-w-4xl">
+            {/* Source badge */}
+            {source && results.length > 0 && (
+              <div className="mb-4 flex justify-end">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                    source === "live"
+                      ? "bg-green-400/10 text-green-400 border border-green-400/30"
+                      : "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      source === "live" ? "bg-green-400" : "bg-yellow-400"
+                    }`}
+                  />
+                  {source === "live" ? "Live API" : "Demo Data"}
+                </span>
+              </div>
+            )}
+
             {results.length > 0 ? (
               <>
                 <div className="mb-6 flex items-baseline justify-between">
@@ -153,7 +200,7 @@ export default function SearchSection() {
 
                     return (
                       <div
-                        key={flight.id}
+                        key={flight.id + "-" + i}
                         className={`group rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 sm:p-6 transition-all hover:border-green-400/30 hover:glow-green-sm slide-up`}
                         style={{ animationDelay: `${i * 100}ms` }}
                       >

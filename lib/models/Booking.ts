@@ -9,6 +9,8 @@ export interface IBooking extends Document {
   price: number;
   seatPreference?: string;
   status: "pending" | "confirmed" | "cancelled";
+  paymentId?: string;
+  orderId?: string;
   createdAt: Date;
 }
 
@@ -50,6 +52,12 @@ const BookingSchema = new Schema<IBooking>(
       type: String,
       enum: ["pending", "confirmed", "cancelled"],
       default: "pending",
+    },
+    paymentId: {
+      type: String,
+    },
+    orderId: {
+      type: String,
     },
     createdAt: {
       type: Date,
