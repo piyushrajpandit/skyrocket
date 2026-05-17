@@ -5,154 +5,239 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 
 interface BookingResult {
-  _id: string; name: string; phone: string; email: string;
-  flightId: string; flightName: string; price: number;
-  seatPreference?: string; status: string; createdAt: string;
+  _id: string;
+  name: string;
+  phone: string;
+  email: string;
+  flightId: string;
+  flightName: string;
+  price: number;
+  seatPreference?: string;
+  status: string;
+  createdAt: string;
 }
 
 function ConfirmationContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("bookingId");
+
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!bookingId) { setLoading(false); return; }
-    fetch(`/api/bookings/${bookingId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setBooking(data.data);
-        else setError("Booking not found");
-      })
-      .catch(() => setError("Failed to load booking"))
-      .finally(() => setLoading(false));
+    async function fetchBooking() {
+      if (!bookingId || bookingId === "test") {
+        setError("No valid booking ID provided. Please complete a booking first.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}`);
+        const data = await res.json();
+
+        if (data.success) {
+          setBooking(data.data);
+        } else {
+          setError(data.error || "Booking not found");
+        }
+      } catch {
+        setError("Failed to load booking details. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchBooking();
   }, [bookingId]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-green-400/30 border-t-green-400" />
-          <p className="text-sm text-[var(--muted)]">Loading booking...</p>
+      <div className="flex flex-1 items-center justify-center py-20">
+        <div className="flex items-center gap-3">
+          <svg className="h-5 w-5 animate-spin text-green-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-[var(--muted)]">Loading booking...</span>
         </div>
       </div>
     );
   }
 
-  if (!bookingId || error || !booking) {
+  if (error || !booking) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400"><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>
-        </div>
-        <h1 className="text-xl font-semibold text-white">{error || "No booking found"}</h1>
-        <Link href="/" className="mt-2 inline-flex items-center gap-2 rounded-xl bg-green-400 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-green-300">← Back to Home</Link>
+      <div className="flex flex-1 flex-col items-center justify-center py-20">
+        <div className="text-6xl mb-4">😕</div>
+        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2">
+          {error || "No booking found"}
+        </h1>
+        <p className="text-[var(--muted)] mb-6 max-w-md text-center">
+          The booking ID may be invalid or the booking hasn&apos;t been created yet. Please try again.
+        </p>
+        <Link
+          href="/"
+          className="rounded-lg bg-green-500 px-6 py-3 text-sm font-semibold text-white hover:bg-green-600 transition-colors"
+          aria-label="Go back to search flights"
+        >
+          Search Flights
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-3xl items-center gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 text-[var(--muted)] transition-colors hover:text-white">
-            <span className="text-sm">← Home</span>
-          </Link>
-          <div className="h-4 w-px bg-[var(--card-border)]" />
-          <h1 className="text-sm font-semibold text-white">Booking Confirmed</h1>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-400/20 text-[10px] font-bold text-green-400">✓</div>
-            <div className="h-px w-4 bg-green-400/30" />
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-400/20 text-[10px] font-bold text-green-400">✓</div>
-            <div className="h-px w-4 bg-green-400/30" />
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-400 text-[10px] font-bold text-gray-900">✓</div>
+    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      {/* Success header */}
+      <div className="text-center mb-10">
+        <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-500/20 text-4xl mb-4">
+          🎉
+        </div>
+        <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
+          Booking Confirmed!
+        </h1>
+        <p className="text-[var(--muted)]">
+          Your flight has been booked successfully
+        </p>
+      </div>
+
+      {/* Booking ID */}
+      <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 mb-6 text-center">
+        <p className="text-xs text-green-400/70 uppercase tracking-wider mb-1">
+          Booking ID
+        </p>
+        <p className="text-lg font-mono font-bold text-green-400">
+          {booking._id}
+        </p>
+      </div>
+
+      {/* Details */}
+      <div className="space-y-4">
+        {/* Flight Details */}
+        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
+          <h2 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+            Flight Details
+          </h2>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Flight</span>
+              <span className="text-[var(--foreground)] font-medium">
+                {booking.flightName}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Flight ID</span>
+              <span className="text-[var(--foreground)]">{booking.flightId}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Price</span>
+              <span className="text-green-400 font-semibold">
+                {booking.price === 0
+                  ? "FREE"
+                  : `₹${booking.price.toLocaleString("en-IN")}`}
+              </span>
+            </div>
           </div>
         </div>
-      </header>
 
-      <main className="flex-1 py-10 sm:py-16">
-        <div className="mx-auto max-w-2xl px-4 sm:px-6">
-          {/* Success hero */}
-          <div className="slide-up mb-8 text-center">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-400/10 glow-green">
-              <span className="text-4xl">🎉</span>
+        {/* Passenger Details */}
+        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
+          <h2 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+            Passenger Details
+          </h2>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Name</span>
+              <span className="text-[var(--foreground)] font-medium">
+                {booking.name}
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">Booking Confirmed!</h1>
-            <p className="mt-2 text-sm text-[var(--muted)]">Your flight has been booked successfully</p>
-          </div>
-
-          {/* Booking ID */}
-          <div className="slide-up mb-6 rounded-2xl border border-green-400/20 bg-green-400/5 p-4 text-center" style={{ animationDelay: "100ms" }}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] mb-1">Booking ID</p>
-            <p className="text-lg font-bold font-mono text-green-400 tracking-wider select-all">{booking._id}</p>
-          </div>
-
-          {/* Details card */}
-          <div className="slide-up rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] overflow-hidden" style={{ animationDelay: "200ms" }}>
-            {/* Flight section */}
-            <div className="p-6 border-b border-[var(--card-border)]">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] mb-4">Flight Details</p>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-400/10 border border-green-400/20">
-                  <span className="text-sm font-bold text-green-400">{booking.flightId.split("-")[0]}</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">{booking.flightName}</p>
-                  <p className="text-xs text-[var(--muted)] font-mono">{booking.flightId}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-y-2.5 text-sm">
-                <span className="text-[var(--muted)]">Status</span>
-                <span className="text-right">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-green-400/10 px-2.5 py-0.5 text-xs font-semibold text-green-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                  </span>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Phone</span>
+              <span className="text-[var(--foreground)]">{booking.phone}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Email</span>
+              <span className="text-[var(--foreground)]">{booking.email}</span>
+            </div>
+            {booking.seatPreference && (
+              <div className="flex justify-between">
+                <span className="text-[var(--muted)]">Seat</span>
+                <span className="text-[var(--foreground)]">
+                  {booking.seatPreference}
                 </span>
-                <span className="text-[var(--muted)]">Amount Paid</span>
-                <span className="text-right text-green-400 font-bold">₹{booking.price.toLocaleString("en-IN")}</span>
               </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-[var(--muted)]">Status</span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  booking.status === "confirmed"
+                    ? "bg-green-400/10 text-green-400"
+                    : "bg-yellow-400/10 text-yellow-400"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    booking.status === "confirmed"
+                      ? "bg-green-400"
+                      : "bg-yellow-400"
+                  }`}
+                />
+                {booking.status.charAt(0).toUpperCase() +
+                  booking.status.slice(1)}
+              </span>
             </div>
-
-            {/* Passenger section */}
-            <div className="p-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] mb-4">Passenger Details</p>
-              <div className="grid grid-cols-2 gap-y-2.5 text-sm">
-                <span className="text-[var(--muted)]">Name</span>
-                <span className="text-white font-medium text-right">{booking.name}</span>
-                <span className="text-[var(--muted)]">Email</span>
-                <span className="text-white font-medium text-right truncate">{booking.email}</span>
-                <span className="text-[var(--muted)]">Phone</span>
-                <span className="text-white font-medium text-right">{booking.phone}</span>
-                {booking.seatPreference && (
-                  <>
-                    <span className="text-[var(--muted)]">Seat</span>
-                    <span className="text-white font-medium text-right">{booking.seatPreference}</span>
-                  </>
-                )}
-                <span className="text-[var(--muted)]">Booked On</span>
-                <span className="text-white font-medium text-right">{new Date(booking.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="slide-up mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center" style={{ animationDelay: "300ms" }}>
-            <Link href="/" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-400 to-emerald-500 px-6 py-3 text-sm font-bold text-gray-900 transition-all hover:from-green-300 hover:to-emerald-400 hover:shadow-lg hover:shadow-green-400/25">
-              Search More Flights
-            </Link>
           </div>
         </div>
-      </main>
+
+        {/* WhatsApp notice */}
+        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-center">
+          <p className="text-sm text-[var(--muted)]">
+            📱 A WhatsApp confirmation has been sent to{" "}
+            <span className="text-[var(--foreground)] font-medium">
+              {booking.phone}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <Link
+          href="/"
+          className="flex-1 rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)] px-6 py-3 text-sm font-medium text-[var(--foreground)] text-center hover:border-green-400/30 transition-colors"
+          aria-label="Go back to homepage"
+        >
+          Back to Home
+        </Link>
+        <Link
+          href="/admin"
+          className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-3 text-sm font-semibold text-white text-center shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all"
+          aria-label="View all bookings on admin dashboard"
+        >
+          View Admin Dashboard
+        </Link>
+      </div>
     </div>
   );
 }
 
 export default function ConfirmationPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-2 border-green-400/30 border-t-green-400" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center py-20">
+          <div className="flex items-center gap-3">
+            <svg className="h-5 w-5 animate-spin text-green-400" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-[var(--muted)]">Loading confirmation...</span>
+          </div>
+        </div>
+      }
+    >
       <ConfirmationContent />
     </Suspense>
   );

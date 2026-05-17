@@ -5,10 +5,19 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface BookingData {
-  name: string; phone: string; email: string; seatPreference: string;
-  flightId: string; flightName: string; airline: string; flightNumber: string;
-  from: string; to: string; departure: string; duration: string;
-  price: number; logo: string;
+  name: string;
+  phone: string;
+  email: string;
+  seatPreference: string;
+  flightId: string;
+  flightName: string;
+  airline: string;
+  flightNumber: string;
+  from: string;
+  to: string;
+  departure: string;
+  duration: string;
+  price: number;
 }
 
 export default function PaymentPage() {
@@ -16,7 +25,8 @@ export default function PaymentPage() {
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [coupon, setCoupon] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmStatus, setConfirmStatus] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -26,22 +36,18 @@ export default function PaymentPage() {
     }
   }, []);
 
-  const isFree = couponApplied && coupon.trim().toUpperCase() === "HACKATHON2026";
-
-  const handleCouponApply = () => {
-    if (coupon.trim().toUpperCase() === "HACKATHON2026") {
-      setCouponApplied(true);
-    } else {
-      setCouponApplied(false);
-      setError("Invalid coupon code");
-      setTimeout(() => setError(""), 3000);
-    }
+  const handleCouponChange = (value: string) => {
+    setCoupon(value);
+    setCouponApplied(value.toUpperCase() === "HACKATHON2026");
+    setError("");
   };
 
   const handleConfirm = async () => {
-    if (!booking || !isFree) return;
-    setSubmitting(true);
+    if (!booking || !couponApplied) return;
+
+    setConfirming(true);
     setError("");
+    setConfirmStatus("Saving booking to database...");
 
     try {
       const res = await fetch("/api/bookings", {
@@ -58,179 +64,289 @@ export default function PaymentPage() {
           status: "confirmed",
         }),
       });
+
       const data = await res.json();
-      if (data.success) {
-        localStorage.removeItem("skymock_booking");
-        router.push(`/confirmation?bookingId=${data.data._id}`);
-      } else {
-        setError(data.error || "Booking failed. Please try again.");
+
+      if (!res.ok || !data.success) {
+        setError(data.error || "Failed to save booking. Please try again.");
+        setConfirming(false);
+        setConfirmStatus("");
+        return;
       }
-    } catch {
-      setError("Network error. Please check your connection.");
-    } finally {
-      setSubmitting(false);
+
+      setConfirmStatus("Sending WhatsApp confirmation...");
+
+      // Small delay to show the WhatsApp status text
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Clear localStorage
+      localStorage.removeItem("skymock_booking");
+
+      // Navigate to confirmation
+      router.push(`/confirmation?bookingId=${data.data._id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Network error. Please check your connection and try again.";
+      setError(message);
+      setConfirming(false);
+      setConfirmStatus("");
     }
   };
 
   if (!booking) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400"><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></svg>
-        </div>
-        <h1 className="text-xl font-semibold text-white">No booking data found</h1>
-        <p className="text-sm text-[var(--muted)]">Please complete the passenger details first.</p>
-        <Link href="/" className="mt-2 inline-flex items-center gap-2 rounded-xl bg-green-400 px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-green-300">← Back to Search</Link>
+      <div className="flex flex-1 flex-col items-center justify-center py-20">
+        <div className="text-6xl mb-4">💳</div>
+        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2">
+          No booking data found
+        </h1>
+        <p className="text-[var(--muted)] mb-6">
+          Please complete the passenger details first.
+        </p>
+        <Link
+          href="/"
+          className="rounded-lg bg-green-500 px-6 py-3 text-sm font-semibold text-white hover:bg-green-600 transition-colors"
+          aria-label="Go back to search flights"
+        >
+          Search Flights
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-4xl items-center gap-4 px-4 sm:px-6">
-          <Link href={`/book?flightId=${booking.flightId}`} className="flex items-center gap-2 text-[var(--muted)] transition-colors hover:text-white">
-            <span className="text-sm">← Back</span>
-          </Link>
-          <div className="h-4 w-px bg-[var(--card-border)]" />
-          <h1 className="text-sm font-semibold text-white">Payment</h1>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-400/20 text-[10px] font-bold text-green-400">✓</div>
-            <div className="h-px w-4 bg-green-400/30" />
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-400 text-[10px] font-bold text-gray-900">2</div>
-            <div className="h-px w-4 bg-[var(--card-border)]" />
-            <div className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--card-border)] text-[10px] font-bold text-[var(--muted)]">3</div>
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      {/* Step indicator */}
+      <div className="mb-8 flex items-center justify-center gap-2 text-sm">
+        {[
+          { num: 1, label: "Search", done: true },
+          { num: 2, label: "Details", done: true },
+          { num: 3, label: "Payment", active: true },
+        ].map((step, i) => (
+          <div key={step.num} className="flex items-center gap-2">
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+                step.done
+                  ? "bg-green-500 text-white"
+                  : step.active
+                  ? "bg-green-400/20 text-green-400 border border-green-400/50"
+                  : "bg-[var(--card-bg)] text-[var(--muted)] border border-[var(--card-border)]"
+              }`}
+            >
+              {step.done ? "✓" : step.num}
+            </div>
+            <span
+              className={`hidden sm:inline ${
+                step.active ? "text-green-400 font-medium" : "text-[var(--muted)]"
+              }`}
+            >
+              {step.label}
+            </span>
+            {i < 2 && (
+              <div className="mx-2 h-px w-8 bg-[var(--card-border)]" />
+            )}
           </div>
-        </div>
-      </header>
+        ))}
+      </div>
 
-      <main className="flex-1 py-8 sm:py-12">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="grid gap-6 lg:grid-cols-5">
-            {/* Booking Summary sidebar */}
-            <div className="lg:col-span-2 lg:order-2 space-y-4">
-              {/* Flight card */}
-              <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Flight Details</p>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-400/10 border border-green-400/20">
-                    <span className="text-xs font-bold text-green-400">{booking.logo}</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white text-sm">{booking.airline}</p>
-                    <p className="text-xs text-[var(--muted)] font-mono">{booking.flightNumber}</p>
-                  </div>
-                </div>
-                <div className="h-px bg-[var(--card-border)] mb-3" />
-                <div className="grid grid-cols-2 gap-y-2 text-xs">
-                  <span className="text-[var(--muted)]">Route</span>
-                  <span className="text-white font-medium text-right">{booking.from} → {booking.to}</span>
-                  <span className="text-[var(--muted)]">Departure</span>
-                  <span className="text-white font-medium text-right">{booking.departure}</span>
-                  <span className="text-[var(--muted)]">Duration</span>
-                  <span className="text-white font-medium text-right">{booking.duration}</span>
-                </div>
-              </div>
+      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-8">
+        Payment
+      </h1>
 
-              {/* Passenger card */}
-              <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Passenger</p>
-                <div className="grid grid-cols-2 gap-y-2 text-xs">
-                  <span className="text-[var(--muted)]">Name</span>
-                  <span className="text-white font-medium text-right">{booking.name}</span>
-                  <span className="text-[var(--muted)]">Email</span>
-                  <span className="text-white font-medium text-right truncate">{booking.email}</span>
-                  <span className="text-[var(--muted)]">Phone</span>
-                  <span className="text-white font-medium text-right">{booking.phone}</span>
-                  <span className="text-[var(--muted)]">Seat</span>
-                  <span className="text-white font-medium text-right">{booking.seatPreference}</span>
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Flight + Passenger summary */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-24 space-y-4">
+            {/* Flight Details */}
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
+              <h2 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wider mb-4">
+                Flight Details
+              </h2>
+              <p className="text-lg font-bold text-[var(--foreground)]">
+                {booking.airline}
+              </p>
+              <p className="text-sm text-[var(--muted)]">
+                {booking.flightNumber}
+              </p>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-semibold text-[var(--foreground)]">
+                    {booking.departure}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">{booking.from}</p>
+                </div>
+                <div className="text-center text-xs text-[var(--muted)]">
+                  {booking.duration}
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-[var(--muted)]">{booking.to}</p>
                 </div>
               </div>
             </div>
 
-            {/* Payment section */}
-            <div className="lg:col-span-3 lg:order-1 space-y-4">
-              {/* Price breakdown */}
-              <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
-                <h2 className="text-lg font-semibold text-white">Payment Summary</h2>
-                <div className="mt-5 space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-[var(--muted)]">Base Fare</span>
-                    <span className="text-white font-medium">₹{booking.price.toLocaleString("en-IN")}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-[var(--muted)]">Taxes & Fees</span>
-                    <span className="text-white font-medium">₹0</span>
-                  </div>
-                  {isFree && (
-                    <div className="flex items-center justify-between text-sm slide-up">
-                      <span className="text-green-400 font-medium">Coupon Discount</span>
-                      <span className="text-green-400 font-bold">- ₹{booking.price.toLocaleString("en-IN")}</span>
-                    </div>
-                  )}
-                  <div className="h-px bg-[var(--card-border)]" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">Total</span>
-                    <span className={`text-2xl font-bold ${isFree ? "text-green-400" : "text-white"}`}>
-                      {isFree ? "₹0" : `₹${booking.price.toLocaleString("en-IN")}`}
-                    </span>
-                  </div>
+            {/* Passenger */}
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5">
+              <h2 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wider mb-3">
+                Passenger
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">Name</span>
+                  <span className="text-[var(--foreground)] font-medium">
+                    {booking.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">Phone</span>
+                  <span className="text-[var(--foreground)]">
+                    {booking.phone}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">Email</span>
+                  <span className="text-[var(--foreground)] text-xs">
+                    {booking.email}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--muted)]">Seat</span>
+                  <span className="text-[var(--foreground)]">
+                    {booking.seatPreference}
+                  </span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
 
-              {/* Coupon section */}
-              <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
-                <h3 className="text-sm font-semibold text-white mb-1">Have a Coupon?</h3>
-                <p className="text-xs text-[var(--muted)] mb-4">Enter your promo code to get a discount</p>
-                <div className="flex gap-2">
+        {/* Payment section */}
+        <div className="lg:col-span-2">
+          <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-6">
+              Payment Summary
+            </h2>
+
+            {/* Price breakdown */}
+            <div className="space-y-3 border-b border-[var(--card-border)] pb-6 mb-6">
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--muted)]">Base fare</span>
+                <span className="text-[var(--foreground)]">
+                  ₹{booking.price.toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--muted)]">Taxes & fees</span>
+                <span className="text-[var(--foreground)]">₹0</span>
+              </div>
+              {couponApplied && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-green-400">Coupon discount</span>
+                  <span className="text-green-400 font-semibold">
+                    -₹{booking.price.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold pt-3 border-t border-[var(--card-border)]">
+                <span className="text-[var(--foreground)]">Total</span>
+                <span className={couponApplied ? "text-green-400" : "text-[var(--foreground)]"}>
+                  {couponApplied
+                    ? "FREE ✨"
+                    : `₹${booking.price.toLocaleString("en-IN")}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Coupon section */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-1">
+                Have a Coupon?
+              </h3>
+              <p className="text-xs text-[var(--muted)] mb-3">
+                Enter your promo code to get a discount
+              </p>
+              <div className="flex gap-3">
+                <div className="relative flex-1">
                   <input
+                    id="coupon-code-input"
                     type="text"
-                    placeholder="Enter coupon code"
+                    placeholder="Enter coupon code e.g. HACKATHON2026"
+                    aria-label="Coupon code input field"
                     value={coupon}
-                    onChange={(e) => { setCoupon(e.target.value); setCouponApplied(false); }}
-                    className="flex-1 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-white placeholder-[var(--muted)]/50 outline-none transition-all focus:border-green-400/50 focus:ring-2 focus:ring-green-400/10 uppercase font-mono tracking-wider"
+                    onChange={(e) => handleCouponChange(e.target.value)}
+                    disabled={confirming}
+                    className="w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]/50 focus:border-green-400 focus:outline-none focus:ring-1 focus:ring-green-400/50 transition-colors uppercase tracking-wider pr-10"
                   />
-                  <button type="button" onClick={handleCouponApply}
-                    className="rounded-xl bg-[var(--input-bg)] border border-[var(--input-border)] px-5 py-3 text-sm font-semibold text-white transition-all hover:border-green-400/30 hover:bg-green-400/5">
-                    Apply
-                  </button>
-                </div>
-
-                {isFree && (
-                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-green-400/20 bg-green-400/5 px-4 py-3 slide-up">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-green-400 shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="m9 11 3 3L22 4" /></svg>
-                    <span className="text-sm font-semibold text-green-400">Free! Payment waived</span>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
-                    {error}
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              {isFree ? (
-                <button onClick={handleConfirm} disabled={submitting}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-400 to-emerald-500 px-6 py-4 text-sm font-bold text-gray-900 transition-all duration-200 hover:from-green-300 hover:to-emerald-400 hover:shadow-lg hover:shadow-green-400/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
-                  {submitting ? (
-                    <><span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900/30 border-t-gray-900" /> Processing...</>
-                  ) : (
-                    <>✓ Confirm Booking</>
+                  {couponApplied && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400 text-lg" aria-label="Coupon applied successfully">
+                      ✓
+                    </span>
                   )}
-                </button>
-              ) : (
-                <button disabled
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] px-6 py-4 text-sm font-bold text-[var(--muted)] cursor-not-allowed opacity-60">
-                  Pay ₹{booking.price.toLocaleString("en-IN")}
-                </button>
+                </div>
+              </div>
+              {couponApplied && (
+                <p className="mt-2 text-sm text-green-400 font-medium flex items-center gap-1.5">
+                  <span>✓</span> Free! Payment waived
+                </p>
+              )}
+              {coupon && !couponApplied && (
+                <p className="mt-2 text-sm text-red-400">
+                  Invalid coupon code
+                </p>
               )}
             </div>
+
+            {/* Error message (Task 3) */}
+            {error && (
+              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+                <p className="font-semibold mb-1">⚠️ Booking Error</p>
+                <p>{error}</p>
+              </div>
+            )}
+
+            {/* Status text while confirming (Task 2) */}
+            {confirming && confirmStatus && (
+              <div className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-400 flex items-center gap-3">
+                <svg className="h-4 w-4 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span>{confirmStatus}</span>
+              </div>
+            )}
+
+            {/* Confirm / Pay buttons */}
+            {couponApplied ? (
+              <button
+                id="confirm-booking-button"
+                onClick={handleConfirm}
+                disabled={confirming}
+                aria-label="Confirm booking with coupon applied"
+                className="w-full rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-green-500/25 transition-all hover:shadow-green-500/40 hover:brightness-110 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {confirming ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Confirming Booking...
+                  </>
+                ) : (
+                  "✅ Confirm Booking — FREE"
+                )}
+              </button>
+            ) : (
+              <button
+                disabled
+                aria-label="Payment disabled, enter a valid coupon code first"
+                className="w-full rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)] px-6 py-3.5 text-sm font-semibold text-[var(--muted)] cursor-not-allowed"
+              >
+                Pay ₹{booking.price.toLocaleString("en-IN")} (Disabled — Enter
+                Coupon)
+              </button>
+            )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
