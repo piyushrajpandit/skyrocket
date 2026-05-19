@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 
 interface BookingResult {
@@ -24,6 +24,7 @@ function ConfirmationContent() {
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     async function fetchBooking() {
@@ -50,6 +51,168 @@ function ConfirmationContent() {
     }
     fetchBooking();
   }, [bookingId]);
+
+  const handleDownloadTicket = useCallback(async () => {
+    if (!booking) return;
+    setGeneratingPdf(true);
+
+    try {
+      // Dynamic imports for client-only libraries
+      const { jsPDF } = await import("jspdf");
+      const QRCode = await import("qrcode");
+
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Colors
+      const bgColor = [15, 15, 20] as const;
+      const cardColor = [22, 22, 30] as const;
+      const greenColor = [74, 222, 128] as const;
+      const textColor = [240, 240, 240] as const;
+      const mutedColor = [136, 136, 136] as const;
+
+      // Full page dark background
+      doc.setFillColor(...bgColor);
+      doc.rect(0, 0, pageWidth, 297, "F");
+
+      // === Header bar ===
+      doc.setFillColor(16, 185, 129); // emerald-500
+      doc.roundedRect(15, 12, pageWidth - 30, 22, 4, 4, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("✈  SkyMock", 24, 25);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("E-TICKET / BOARDING PASS", pageWidth - 24, 25, { align: "right" });
+
+      // === Status badge ===
+      const statusText = booking.status.toUpperCase();
+      const isConfirmed = booking.status === "confirmed";
+      doc.setFillColor(...(isConfirmed ? greenColor : [248, 113, 113] as const));
+      doc.roundedRect(pageWidth / 2 - 20, 40, 40, 8, 2, 2, "F");
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text(statusText, pageWidth / 2, 45.5, { align: "center" });
+
+      // === Booking ID card ===
+      doc.setFillColor(...cardColor);
+      doc.roundedRect(15, 54, pageWidth - 30, 18, 3, 3, "F");
+      doc.setTextColor(...mutedColor);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.text("BOOKING ID", pageWidth / 2, 61, { align: "center" });
+      doc.setTextColor(...greenColor);
+      doc.setFontSize(11);
+      doc.setFont("courier", "bold");
+      doc.text(booking._id, pageWidth / 2, 68, { align: "center" });
+
+      // === Flight Details card ===
+      let y = 80;
+      doc.setFillColor(...cardColor);
+      doc.roundedRect(15, y, pageWidth - 30, 46, 3, 3, "F");
+
+      doc.setTextColor(...mutedColor);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text("FLIGHT DETAILS", 22, y + 8);
+
+      // Dashed line
+      doc.setDrawColor(60, 60, 70);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.line(22, y + 11, pageWidth - 22, y + 11);
+      doc.setLineDashPattern([], 0);
+
+      const rows = [
+        ["Flight", booking.flightName],
+        ["Flight ID", booking.flightId],
+        ["Seat", booking.seatPreference || "Any"],
+        ["Price", booking.price === 0 ? "FREE" : `Rs. ${booking.price.toLocaleString("en-IN")}`],
+      ];
+
+      let rowY = y + 17;
+      for (const [label, value] of rows) {
+        doc.setTextColor(...mutedColor);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(label, 22, rowY);
+
+        doc.setTextColor(...textColor);
+        doc.setFont("helvetica", "bold");
+        doc.text(value, pageWidth - 22, rowY, { align: "right" });
+        rowY += 8;
+      }
+
+      // === Passenger Details card ===
+      y = 132;
+      doc.setFillColor(...cardColor);
+      doc.roundedRect(15, y, pageWidth - 30, 38, 3, 3, "F");
+
+      doc.setTextColor(...mutedColor);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text("PASSENGER DETAILS", 22, y + 8);
+
+      doc.setDrawColor(60, 60, 70);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.line(22, y + 11, pageWidth - 22, y + 11);
+      doc.setLineDashPattern([], 0);
+
+      const passengerRows = [
+        ["Name", booking.name],
+        ["Email", booking.email],
+        ["Phone", booking.phone],
+      ];
+
+      rowY = y + 17;
+      for (const [label, value] of passengerRows) {
+        doc.setTextColor(...mutedColor);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(label, 22, rowY);
+
+        doc.setTextColor(...textColor);
+        doc.setFont("helvetica", "bold");
+        doc.text(value, pageWidth - 22, rowY, { align: "right" });
+        rowY += 8;
+      }
+
+      // === QR Code ===
+      y = 178;
+      const qrDataUrl = await QRCode.toDataURL(booking._id, {
+        width: 200,
+        margin: 1,
+        color: { dark: "#4ade80", light: "#16161e" },
+      });
+
+      doc.setFillColor(...cardColor);
+      doc.roundedRect(pageWidth / 2 - 28, y, 56, 62, 3, 3, "F");
+      doc.addImage(qrDataUrl, "PNG", pageWidth / 2 - 22, y + 4, 44, 44);
+
+      doc.setTextColor(...mutedColor);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.text("Scan to verify", pageWidth / 2, y + 55, { align: "center" });
+
+      // === Footer ===
+      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(7);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} • SkyMock Hackathon Demo`,
+        pageWidth / 2,
+        255,
+        { align: "center" }
+      );
+
+      // Save
+      doc.save(`SkyMock-Ticket-${booking._id.slice(-8)}.pdf`);
+    } catch (err) {
+      console.error("[PDF] Generation failed:", err);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }, [booking]);
 
   if (loading) {
     return (
@@ -191,12 +354,18 @@ function ConfirmationContent() {
           </div>
         </div>
 
-        {/* WhatsApp notice */}
-        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-center">
+        {/* Notifications notice */}
+        <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-center space-y-1">
           <p className="text-sm text-[var(--muted)]">
             📱 A WhatsApp confirmation has been sent to{" "}
             <span className="text-[var(--foreground)] font-medium">
               {booking.phone}
+            </span>
+          </p>
+          <p className="text-sm text-[var(--muted)]">
+            📧 A confirmation email has been sent to{" "}
+            <span className="text-[var(--foreground)] font-medium">
+              {booking.email}
             </span>
           </p>
         </div>
@@ -204,6 +373,24 @@ function ConfirmationContent() {
 
       {/* Actions */}
       <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={handleDownloadTicket}
+          disabled={generatingPdf}
+          className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-60"
+          aria-label="Download PDF ticket"
+        >
+          {generatingPdf ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Generating PDF...
+            </>
+          ) : (
+            <>📄 Download Ticket</>
+          )}
+        </button>
         <Link
           href="/"
           className="flex-1 rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)] px-6 py-3 text-sm font-medium text-[var(--foreground)] text-center hover:border-green-400/30 transition-colors"
@@ -212,11 +399,11 @@ function ConfirmationContent() {
           Back to Home
         </Link>
         <Link
-          href="/admin"
+          href="/my-bookings"
           className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-3 text-sm font-semibold text-white text-center shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all"
-          aria-label="View all bookings on admin dashboard"
+          aria-label="View my bookings"
         >
-          View Admin Dashboard
+          My Bookings
         </Link>
       </div>
     </div>

@@ -24,6 +24,8 @@ export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -52,6 +54,35 @@ export default function MyBookingsPage() {
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    setCancellingId(bookingId);
+    setShowCancelModal(null);
+
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // Update local state
+        setBookings((prev) =>
+          prev.map((b) =>
+            b._id === bookingId ? { ...b, status: "cancelled" } : b
+          )
+        );
+      } else {
+        setError(data.error || "Failed to cancel booking");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -124,6 +155,12 @@ export default function MyBookingsPage() {
             <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
               <p className="font-semibold mb-1">⚠️ Error</p>
               <p>{error}</p>
+              <button
+                onClick={() => setError("")}
+                className="mt-2 text-xs underline hover:no-underline"
+              >
+                Dismiss
+              </button>
             </div>
           )}
 
@@ -218,13 +255,34 @@ export default function MyBookingsPage() {
                       </div>
                     </div>
 
-                    {/* Price */}
+                    {/* Price + Cancel */}
                     <div className="flex items-center gap-4">
                       <p className="text-xl font-bold text-green-400">
                         {booking.price === 0
                           ? "FREE"
                           : `₹${booking.price.toLocaleString("en-IN")}`}
                       </p>
+
+                      {booking.status === "confirmed" && (
+                        <button
+                          onClick={() => setShowCancelModal(booking._id)}
+                          disabled={cancellingId === booking._id}
+                          className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                          aria-label={`Cancel booking ${booking._id.slice(-8)}`}
+                        >
+                          {cancellingId === booking._id ? (
+                            <span className="flex items-center gap-1.5">
+                              <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Cancelling...
+                            </span>
+                          ) : (
+                            "✕ Cancel"
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -233,6 +291,52 @@ export default function MyBookingsPage() {
           )}
         </div>
       </main>
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowCancelModal(null)}
+          />
+
+          {/* Modal */}
+          <div className="relative w-full max-w-md rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-2xl shadow-black/40">
+            <div className="text-center mb-6">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-2xl mb-3">
+                ⚠️
+              </div>
+              <h2 className="text-xl font-bold text-[var(--foreground)] mb-1">
+                Cancel Booking?
+              </h2>
+              <p className="text-sm text-[var(--muted)]">
+                Are you sure you want to cancel this booking? This action cannot be undone.
+              </p>
+              {bookings.find((b) => b._id === showCancelModal)?.paymentId && (
+                <p className="mt-2 text-xs text-yellow-400">
+                  💳 A refund will be initiated for the payment amount.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(null)}
+                className="flex-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-2.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--card-border)]/50 transition-colors"
+              >
+                Keep Booking
+              </button>
+              <button
+                onClick={() => handleCancelBooking(showCancelModal)}
+                className="flex-1 rounded-lg bg-red-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-600 transition-colors"
+              >
+                Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

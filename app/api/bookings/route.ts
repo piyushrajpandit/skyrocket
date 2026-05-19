@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Booking from "@/lib/models/Booking";
 import { sendBookingWhatsApp } from "@/lib/twilio";
+import { sendBookingConfirmationEmail } from "@/lib/resend";
 
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, phone, email, flightId, flightName, price, seatPreference, status } = body;
 
-    if (!name || !phone || !email || !flightId || !flightName || !price) {
+    if (!name || !phone || !email || !flightId || !flightName || price === undefined) {
       return NextResponse.json(
         { success: false, error: "All fields are required" },
         { status: 400 }
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
     });
 
-    // Send WhatsApp confirmation (non-blocking — don't fail the booking if Twilio errors)
+    // Send WhatsApp confirmation (non-blocking)
     if (booking.status === "confirmed") {
       sendBookingWhatsApp({
         name: booking.name,
@@ -55,6 +56,20 @@ export async function POST(request: NextRequest) {
         bookingId: booking._id.toString(),
       }).catch((err) => {
         console.error("[Twilio] Background send failed:", err);
+      });
+
+      // Send confirmation email (non-blocking)
+      sendBookingConfirmationEmail({
+        name: booking.name,
+        email: booking.email,
+        phone: booking.phone,
+        flightName: booking.flightName,
+        flightId: booking.flightId,
+        seatPreference: booking.seatPreference,
+        price: booking.price,
+        bookingId: booking._id.toString(),
+      }).catch((err) => {
+        console.error("[Resend] Background email failed:", err);
       });
     }
 
