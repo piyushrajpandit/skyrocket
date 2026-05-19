@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import Script from "next/script";
+import toast from "react-hot-toast";
 
 interface BookingData {
   name: string;
@@ -93,7 +94,9 @@ export default function PaymentPage() {
 
   const handleCouponChange = (value: string) => {
     setCoupon(value);
-    setCouponApplied(value.toUpperCase() === "HACKATHON2026");
+    const applied = value.toUpperCase() === "HACKATHON2026";
+    setCouponApplied(applied);
+    if (applied) toast.success("🎟️ Coupon applied! Booking is free.");
     setError("");
   };
 
@@ -124,15 +127,18 @@ export default function PaymentPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.error || "Failed to save booking. Please try again.");
+        const msg = data.error || "Failed to save booking. Please try again.";
+        setError(msg);
+        toast.error("❌ " + msg);
         setConfirming(false);
         setConfirmStatus("");
         return;
       }
 
-      setConfirmStatus("Sending WhatsApp confirmation...");
+      setConfirmStatus("Sending confirmations...");
       await new Promise((r) => setTimeout(r, 1500));
 
+      toast.success("✅ Booking confirmed!");
       localStorage.removeItem("skymock_booking");
       router.push(`/confirmation?bookingId=${data.data._id}`);
     } catch (err) {
@@ -227,9 +233,10 @@ export default function PaymentPage() {
               return;
             }
 
-            setConfirmStatus("Sending WhatsApp confirmation...");
+            setConfirmStatus("Sending confirmations...");
             await new Promise((r) => setTimeout(r, 1200));
 
+            toast.success("✅ Payment verified & booking confirmed!");
             localStorage.removeItem("skymock_booking");
             router.push(`/confirmation?bookingId=${verifyData.data._id}`);
           } catch {

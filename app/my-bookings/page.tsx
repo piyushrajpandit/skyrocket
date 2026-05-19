@@ -3,6 +3,7 @@
 import { useSession, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import Header from "../components/Header";
 
 interface BookingRecord {
@@ -70,14 +71,16 @@ export default function MyBookingsPage() {
       const data = await res.json();
 
       if (data.success) {
-        // Update local state
         setBookings((prev) =>
           prev.map((b) =>
             b._id === bookingId ? { ...b, status: "cancelled" } : b
           )
         );
+        toast.success("🚫 Booking cancelled");
       } else {
-        setError(data.error || "Failed to cancel booking");
+        const msg = data.error || "Failed to cancel booking";
+        setError(msg);
+        toast.error(msg);
       }
     } catch {
       setError("Network error. Please try again.");
