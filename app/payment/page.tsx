@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import Script from "next/script";
 
@@ -52,6 +53,7 @@ interface RazorpayResponse {
 
 export default function PaymentPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [coupon, setCoupon] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
@@ -60,12 +62,34 @@ export default function PaymentPage() {
   const [error, setError] = useState("");
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      signIn("google", { callbackUrl: "/payment" });
+    }
+  }, [status]);
+
   useEffect(() => {
     const stored = localStorage.getItem("skymock_booking");
     if (stored) {
       setBooking(JSON.parse(stored));
     }
   }, []);
+
+  // Show loading while checking auth
+  if (status === "loading") {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20">
+        <div className="flex items-center gap-3">
+          <svg className="h-5 w-5 animate-spin text-green-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-[var(--muted)]">Checking authentication...</span>
+        </div>
+      </div>
+    );
+  }
 
   const handleCouponChange = (value: string) => {
     setCoupon(value);

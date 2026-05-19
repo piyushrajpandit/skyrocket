@@ -2,12 +2,14 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
+import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import type { Flight } from "@/lib/flights";
 
 function BookingForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { data: session, status } = useSession();
   const flightId = searchParams.get("flightId");
 
   const [flight, setFlight] = useState<Flight | null>(null);
@@ -17,6 +19,21 @@ function BookingForm() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [seat, setSeat] = useState("Window");
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      signIn("google", { callbackUrl: `/book?flightId=${flightId}` });
+    }
+  }, [status, flightId]);
+
+  // Auto-fill name and email from Google session
+  useEffect(() => {
+    if (session?.user) {
+      if (session.user.name && !name) setName(session.user.name);
+      if (session.user.email && !email) setEmail(session.user.email);
+    }
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function fetchFlight() {
@@ -60,6 +77,21 @@ function BookingForm() {
     localStorage.setItem("skymock_booking", JSON.stringify(bookingData));
     router.push("/payment");
   };
+
+  // Show loading while checking auth
+  if (status === "loading") {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20">
+        <div className="flex items-center gap-3">
+          <svg className="h-5 w-5 animate-spin text-green-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-[var(--muted)]">Checking authentication...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!flightId || (!loading && !flight)) {
     return (
@@ -120,6 +152,16 @@ function BookingForm() {
       <h1 className="text-3xl font-bold text-[var(--foreground)] mb-8">
         Passenger Details
       </h1>
+
+      {/* Auto-fill badge */}
+      {session?.user && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-400/20 bg-green-400/5 px-4 py-2.5 text-sm text-green-400">
+          <span>✨</span>
+          <span>
+            Logged in as <strong>{session.user.name}</strong> — name and email auto-filled
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Flight Summary sidebar */}
