@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb";
 import Booking from "@/lib/models/Booking";
 import { sendBookingWhatsApp } from "@/lib/twilio";
 import { sendBookingConfirmationEmail } from "@/lib/resend";
+import { awardPoints, processReferralBonus } from "@/lib/points";
 
 export async function GET() {
   try {
@@ -24,14 +25,36 @@ export async function POST(request: NextRequest) {
     await dbConnect();
 
     const body = await request.json();
-    const { name, phone, email, flightId, flightName, price, seatPreference, status } = body;
+    const {
+      name,
+      phone,
+      email,
+      flightId,
+      flightName,
+      price,
+      seatPreference,
+      status,
+      pointsDiscount,
+    } = body;
 
-    if (!name || !phone || !email || !flightId || !flightName || price === undefined) {
+    if (
+      !name ||
+      !phone ||
+      !email ||
+      !flightId ||
+      !flightName ||
+      price === undefined
+    ) {
       return NextResponse.json(
         { success: false, error: "All fields are required" },
         { status: 400 }
       );
     }
+
+    const finalPrice =
+      pointsDiscount && pointsDiscount > 0
+        ? Math.max(0, price - pointsDiscount)
+        : price;
 
     const booking = await Booking.create({
       name,
@@ -39,14 +62,15 @@ export async function POST(request: NextRequest) {
       email,
       flightId,
       flightName,
-      price,
+      price: finalPrice,
       seatPreference: seatPreference || undefined,
       status: status || "pending",
       createdAt: new Date(),
     });
 
-    // Send WhatsApp confirmation (non-blocking)
+    // If confirmed, send notifications + award points
     if (booking.status === "confirmed") {
+      // Send WhatsApp confirmation (non-blocking)
       sendBookingWhatsApp({
         name: booking.name,
         phone: booking.phone,
@@ -70,6 +94,16 @@ export async function POST(request: NextRequest) {
         bookingId: booking._id.toString(),
       }).catch((err) => {
         console.error("[Resend] Background email failed:", err);
+      });
+
+      // Award 100 loyalty points for booking (non-blocking)
+      awardPoints(booking.email, "Booking confirmed", 100).catch((err) => {
+        console.error("[Points] Award failed:", err);
+      });
+
+      // Process referral bonus if applicable (non-blocking)
+      processReferralBonus(booking.email).catch((err) => {
+        console.error("[Referral] Bonus processing failed:", err);
       });
     }
 

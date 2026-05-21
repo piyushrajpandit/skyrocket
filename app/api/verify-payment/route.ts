@@ -4,6 +4,7 @@ import dbConnect from "@/lib/mongodb";
 import Booking from "@/lib/models/Booking";
 import { sendBookingWhatsApp } from "@/lib/twilio";
 import { sendBookingConfirmationEmail } from "@/lib/resend";
+import { awardPoints, processReferralBonus } from "@/lib/points";
 
 export async function POST(request: NextRequest) {
   try {
@@ -91,6 +92,16 @@ export async function POST(request: NextRequest) {
       bookingId: booking._id.toString(),
     }).catch((err) => {
       console.error("[Resend] Background email failed:", err);
+    });
+
+    // Award 100 loyalty points (non-blocking)
+    awardPoints(booking.email, "Booking confirmed", 100).catch((err) => {
+      console.error("[Points] Award failed:", err);
+    });
+
+    // Process referral bonus if applicable (non-blocking)
+    processReferralBonus(booking.email).catch((err) => {
+      console.error("[Referral] Bonus processing failed:", err);
     });
 
     return NextResponse.json(

@@ -1,11 +1,30 @@
 import mongoose, { Schema, Document, models } from "mongoose";
 
+export interface IPointsHistory {
+  action: string;
+  points: number;
+  date: Date;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
   image?: string;
+  points: number;
+  pointsHistory: IPointsHistory[];
+  referralCode: string;
+  referredBy?: string;
   createdAt: Date;
 }
+
+const PointsHistorySchema = new Schema<IPointsHistory>(
+  {
+    action: { type: String, required: true },
+    points: { type: Number, required: true },
+    date: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const UserSchema = new Schema<IUser>(
   {
@@ -22,6 +41,22 @@ const UserSchema = new Schema<IUser>(
       lowercase: true,
     },
     image: {
+      type: String,
+    },
+    points: {
+      type: Number,
+      default: 0,
+    },
+    pointsHistory: {
+      type: [PointsHistorySchema],
+      default: [],
+    },
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    referredBy: {
       type: String,
     },
     createdAt: {

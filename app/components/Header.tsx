@@ -55,6 +55,22 @@ export default function Header() {
               My Bookings
             </Link>
           )}
+          {session && (
+            <Link
+              href="/my-rewards"
+              className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"
+            >
+              Rewards
+            </Link>
+          )}
+          {session && (
+            <Link
+              href="/refer"
+              className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"
+            >
+              Refer
+            </Link>
+          )}
           <Link
             href="/admin"
             className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"

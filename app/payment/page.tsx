@@ -63,6 +63,11 @@ export default function PaymentPage() {
   const [error, setError] = useState("");
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
+  // Points state
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [usePoints, setUsePoints] = useState(false);
+  const [pointsLoading, setPointsLoading] = useState(true);
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -76,6 +81,34 @@ export default function PaymentPage() {
       setBooking(JSON.parse(stored));
     }
   }, []);
+
+  // Fetch points balance
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetch("/api/user/points")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success) setPointsBalance(data.data.points);
+        })
+        .catch(() => {})
+        .finally(() => setPointsLoading(false));
+    }
+  }, [status]);
+
+  // Compute points discount
+  const maxPointsDiscount = booking
+    ? Math.floor(booking.price * 0.5)
+    : 0;
+  const rawPointsDiscount = Math.floor(pointsBalance / 500) * 100;
+  const pointsDiscount = usePoints && !couponApplied
+    ? Math.min(rawPointsDiscount, maxPointsDiscount)
+    : 0;
+  const pointsToUse = Math.ceil(pointsDiscount / 100) * 500;
+  const finalPrice = booking
+    ? couponApplied
+      ? 0
+      : Math.max(0, booking.price - pointsDiscount)
+    : 0;
 
   // Show loading while checking auth
   if (status === "loading") {
@@ -166,7 +199,7 @@ export default function PaymentPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: booking.price,
+          amount: finalPrice,
           receipt: `sky_${booking.flightId}_${Date.now()}`,
         }),
       });
@@ -432,18 +465,28 @@ export default function PaymentPage() {
                     </span>
                   </div>
                 )}
+                {pointsDiscount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-400">Points discount ({pointsToUse} pts)</span>
+                    <span className="text-blue-400 font-semibold">
+                      -₹{pointsDiscount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-base font-bold pt-3 border-t border-[var(--card-border)]">
                   <span className="text-[var(--foreground)]">Total</span>
                   <span
                     className={
-                      couponApplied
+                      couponApplied || pointsDiscount > 0
                         ? "text-green-400"
                         : "text-[var(--foreground)]"
                     }
                   >
                     {couponApplied
                       ? "FREE ✨"
-                      : `₹${booking.price.toLocaleString("en-IN")}`}
+                      : finalPrice === 0
+                      ? "FREE ✨"
+                      : `₹${finalPrice.toLocaleString("en-IN")}`}
                   </span>
                 </div>
               </div>
@@ -489,6 +532,55 @@ export default function PaymentPage() {
                   </p>
                 )}
               </div>
+
+              {/* Points Redemption section */}
+              {!couponApplied && pointsBalance > 0 && (
+                <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⭐</span>
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--foreground)]">
+                          Use Loyalty Points
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">
+                          {pointsLoading ? "Loading..." : `${pointsBalance.toLocaleString("en-IN")} points available`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setUsePoints(!usePoints)}
+                      disabled={pointsLoading || pointsBalance < 500}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        usePoints ? "bg-blue-500" : "bg-[var(--card-border)]"
+                      } disabled:opacity-40`}
+                      aria-label="Toggle use loyalty points"
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                          usePoints ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {usePoints && pointsDiscount > 0 && (
+                    <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 mt-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-[var(--muted)]">Points used</span>
+                        <span className="text-blue-400 font-medium">{pointsToUse}</span>
+                      </div>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-[var(--muted)]">Discount</span>
+                        <span className="text-blue-400 font-medium">-₹{pointsDiscount.toLocaleString("en-IN")}</span>
+                      </div>
+                      <p className="text-[10px] text-[var(--muted)] mt-2">500 points = ₹100 • Max 50% of ticket price</p>
+                    </div>
+                  )}
+                  {pointsBalance < 500 && (
+                    <p className="text-xs text-[var(--muted)] mt-1">Need at least 500 points to redeem</p>
+                  )}
+                </div>
+              )}
 
               {/* Error message */}
               {error && (
@@ -599,7 +691,7 @@ export default function PaymentPage() {
                     ) : !razorpayLoaded ? (
                       "Loading payment gateway..."
                     ) : (
-                      `💳 Pay ₹${booking.price.toLocaleString("en-IN")} via Razorpay`
+                      `💳 Pay ₹${finalPrice.toLocaleString("en-IN")} via Razorpay`
                     )}
                   </button>
                 )}
