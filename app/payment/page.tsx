@@ -191,10 +191,33 @@ export default function PaymentPage() {
 
     setConfirming(true);
     setError("");
-    setConfirmStatus("Creating payment order...");
 
     try {
+      // Step 0: Deduct points server-side if using them
+      if (usePoints && pointsDiscount > 0) {
+        setConfirmStatus("Redeeming loyalty points...");
+        const redeemRes = await fetch("/api/user/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pointsToUse: pointsToUse,
+            ticketPrice: booking.price,
+          }),
+        });
+        const redeemData = await redeemRes.json();
+        if (!redeemRes.ok || !redeemData.success) {
+          setError(redeemData.error || "Failed to redeem points.");
+          toast.error("❌ Points redemption failed");
+          setConfirming(false);
+          setConfirmStatus("");
+          return;
+        }
+        setPointsBalance(redeemData.data.newBalance);
+        toast.success(`⭐ ${redeemData.data.pointsUsed} points redeemed! -₹${redeemData.data.discount}`);
+      }
+
       // Step 1: Create Razorpay order on server
+      setConfirmStatus("Creating payment order...");
       const orderRes = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -249,7 +272,7 @@ export default function PaymentPage() {
                   email: booking.email,
                   flightId: booking.flightId,
                   flightName: booking.flightName,
-                  price: booking.price,
+                  price: finalPrice,
                   seatPreference: booking.seatPreference,
                 },
               }),
