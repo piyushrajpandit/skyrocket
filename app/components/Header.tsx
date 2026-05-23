@@ -72,6 +72,12 @@ export default function Header() {
             </Link>
           )}
           <Link
+            href="/agent"
+            className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"
+          >
+            AI Agent
+          </Link>
+          <Link
             href="/admin"
             className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"
           >
