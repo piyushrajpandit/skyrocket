@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useFetch } from "@/hooks/useFetch";
+import { logger } from "@/lib/logger";
 
 interface BookingResult {
   _id: string;
@@ -22,35 +24,26 @@ function ConfirmationContent() {
   const bookingId = searchParams.get("bookingId");
 
   const [booking, setBooking] = useState<BookingResult | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
+  const { data: bookingData, loading, error: fetchError } = useFetch<BookingResult>(
+    bookingId && bookingId !== "test" ? `/api/bookings/${bookingId}` : null
+  );
+
   useEffect(() => {
-    async function fetchBooking() {
-      if (!bookingId || bookingId === "test") {
-        setError("No valid booking ID provided. Please complete a booking first.");
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/bookings/${bookingId}`);
-        const data = await res.json();
-
-        if (data.success) {
-          setBooking(data.data);
-        } else {
-          setError(data.error || "Booking not found");
-        }
-      } catch {
-        setError("Failed to load booking details. Please try again.");
-      } finally {
-        setLoading(false);
-      }
+    if (bookingData) {
+      setBooking(bookingData);
     }
-    fetchBooking();
-  }, [bookingId]);
+  }, [bookingData]);
+
+  useEffect(() => {
+    if (!bookingId || bookingId === "test") {
+      setError("No valid booking ID provided. Please complete a booking first.");
+    } else if (fetchError) {
+      setError(fetchError);
+    }
+  }, [bookingId, fetchError]);
 
   const handleDownloadTicket = useCallback(async () => {
     if (!booking) return;
@@ -89,7 +82,8 @@ function ConfirmationContent() {
       // === Status badge ===
       const statusText = booking.status.toUpperCase();
       const isConfirmed = booking.status === "confirmed";
-      doc.setFillColor(...(isConfirmed ? greenColor : [248, 113, 113] as const));
+      const badgeColor = isConfirmed ? greenColor : ([248, 113, 113] as const);
+      doc.setFillColor(badgeColor[0], badgeColor[1], badgeColor[2]);
       doc.roundedRect(pageWidth / 2 - 20, 40, 40, 8, 2, 2, "F");
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(8);
@@ -208,7 +202,7 @@ function ConfirmationContent() {
       // Save
       doc.save(`SkyMock-Ticket-${booking._id.slice(-8)}.pdf`);
     } catch (err) {
-      console.error("[PDF] Generation failed:", err);
+      logger.error("[PDF] Generation failed", err);
     } finally {
       setGeneratingPdf(false);
     }

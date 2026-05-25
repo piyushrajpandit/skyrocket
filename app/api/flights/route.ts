@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { flights } from "@/lib/flights";
+import { apiHandler } from "@/lib/apiHandler";
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   return NextResponse.json({
     success: true,
-    count: flights.length,
     data: flights,
+    message: `Found ${flights.length} flights`,
   });
-}
+});

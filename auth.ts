@@ -1,9 +1,10 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { cookies } from "next/headers";
-import dbConnect from "@/lib/mongodb";
+import { connectDB } from "@/lib/mongodb";
 import User from "@/lib/models/User";
 import { generateReferralCode, awardPoints } from "@/lib/points";
+import { logger } from "@/lib/logger";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -16,7 +17,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user }) {
       // Auto-save user to MongoDB on first login
       try {
-        await dbConnect();
+        await connectDB();
         const existingUser = await User.findOne({ email: user.email });
 
         if (!existingUser) {
@@ -58,7 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             pointsHistory: [],
           });
 
-          console.log(
+          logger.info(
             `[Auth] New user created: ${user.email} (code: ${referralCode}${
               referredBy ? `, referred by: ${referredBy}` : ""
             })`
@@ -75,16 +76,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 `Referral signup by ${user.name}`,
                 200
               ).catch((err) => {
-                console.error("[Referral] Signup bonus failed:", err);
+                logger.error("[Referral] Signup bonus failed", err);
               });
-              console.log(
+              logger.info(
                 `[Referral] +200 to ${referrer.email} for ${user.email} signup`
               );
             }
           }
         }
       } catch (error) {
-        console.error("[Auth] Error saving user:", error);
+        logger.error("[Auth] Error saving user", error);
         // Don't block login if DB save fails
       }
       return true;

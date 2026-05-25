@@ -1,29 +1,32 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { apiHandler } from "@/lib/apiHandler";
+import { logger } from "@/lib/logger";
 
-export async function GET() {
-  try {
-    const session = await auth();
+export const GET = apiHandler(async () => {
+  const session = await auth();
 
-    if (!session?.user?.email) {
-      return NextResponse.json({ authorized: false, reason: "Not logged in" });
-    }
-
-    const adminEmails = (process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-
-    const isAdmin = adminEmails.includes(session.user.email.toLowerCase());
-
-    return NextResponse.json({
-      authorized: isAdmin,
-      reason: isAdmin ? "Authorized" : "Access denied",
-    });
-  } catch {
+  if (!session?.user?.email) {
     return NextResponse.json(
-      { authorized: false, reason: "Server error" },
-      { status: 500 }
+      { success: false, error: "Not logged in", code: "UNAUTHORIZED" },
+      { status: 401 }
     );
   }
-}
+
+  const adminEmails = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isAdmin = adminEmails.includes(session.user.email.toLowerCase());
+
+  logger.info("Admin verify check", { email: session.user.email, isAdmin });
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      authorized: isAdmin,
+      reason: isAdmin ? "Authorized" : "Access denied",
+    },
+  });
+});

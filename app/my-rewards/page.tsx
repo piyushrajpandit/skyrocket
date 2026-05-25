@@ -4,6 +4,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "../components/Header";
+import { useFetch } from "@/hooks/useFetch";
 
 interface PointsEntry {
   action: string;
@@ -13,37 +14,19 @@ interface PointsEntry {
 
 export default function MyRewardsPage() {
   const { status } = useSession();
-  const [points, setPoints] = useState(0);
-  const [history, setHistory] = useState<PointsEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { data, loading } = useFetch<{ points: number; history: PointsEntry[] }>(
+    status === "authenticated" ? "/api/user/points" : null
+  );
+
+  const points = data?.points ?? 0;
+  const history = data?.history ?? [];
 
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn("google", { callbackUrl: "/my-rewards" });
     }
   }, [status]);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchPoints();
-    }
-  }, [status]);
-
-  const fetchPoints = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/user/points");
-      const data = await res.json();
-      if (data.success) {
-        setPoints(data.data.points);
-        setHistory(data.data.history);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (status === "loading") {
     return (

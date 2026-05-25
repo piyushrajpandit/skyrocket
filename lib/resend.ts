@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { logger } from "@/lib/logger";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -85,7 +86,7 @@ export async function sendBookingConfirmationEmail(data: BookingEmailData) {
     html,
   });
 
-  console.log("[Resend] Confirmation email sent to:", email);
+  logger.info(`[Resend] Confirmation email sent to: ${email}`);
 }
 
 export async function sendCancellationEmail(data: BookingEmailData) {
@@ -147,5 +148,5 @@ export async function sendCancellationEmail(data: BookingEmailData) {
     html,
   });
 
-  console.log("[Resend] Cancellation email sent to:", email);
+  logger.info(`[Resend] Cancellation email sent to: ${email}`);
 }

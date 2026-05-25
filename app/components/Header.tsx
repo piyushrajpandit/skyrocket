@@ -3,11 +3,32 @@
 import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Header() {
   const { data: session, status } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setVoiceEnabled(localStorage.getItem("skymock-voice-enabled") === "true");
+    }
+
+    const handleSync = () => {
+      setVoiceEnabled(localStorage.getItem("skymock-voice-enabled") === "true");
+    };
+
+    window.addEventListener("skymock-voice-toggle", handleSync);
+    return () => window.removeEventListener("skymock-voice-toggle", handleSync);
+  }, []);
+
+  const toggleVoice = () => {
+    const newVal = !voiceEnabled;
+    setVoiceEnabled(newVal);
+    localStorage.setItem("skymock-voice-enabled", String(newVal));
+    window.dispatchEvent(new Event("skymock-voice-toggle"));
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-xl">
@@ -78,6 +99,12 @@ export default function Header() {
             AI Agent
           </Link>
           <Link
+            href="/demo"
+            className="text-sm font-bold text-green-400 bg-green-400/15 border border-green-500/35 rounded-lg px-2.5 py-1 transition-all hover:bg-green-400/25"
+          >
+            🔥 Demo
+          </Link>
+          <Link
             href="/admin"
             className="text-sm font-medium text-[var(--muted)] transition-colors hover:text-green-400"
           >
@@ -87,6 +114,18 @@ export default function Header() {
 
         {/* Auth CTA */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={toggleVoice}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all cursor-pointer ${
+              voiceEnabled
+                ? "bg-green-400/20 text-green-400 border-green-500/30"
+                : "bg-[var(--card-bg)] text-[var(--muted)] border-[var(--card-border)] hover:text-[var(--foreground)]"
+            }`}
+            aria-label="Toggle voice feedback"
+          >
+            <span>{voiceEnabled ? "🔊 Voice On" : "🔇 Voice Off"}</span>
+          </button>
+
           <div className="hidden items-center gap-1.5 rounded-full bg-green-400/10 px-3 py-1.5 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-green-400 pulse-dot" />
             <span className="text-xs font-medium text-green-400">

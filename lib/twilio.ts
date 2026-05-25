@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { logger } from "@/lib/logger";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID!;
 const authToken = process.env.TWILIO_AUTH_TOKEN!;
@@ -50,11 +51,11 @@ Have a great flight! 🎉`;
       from: whatsappFrom,
       to,
     });
-    console.log(`[Twilio] WhatsApp sent: ${message.sid}`);
+    logger.info(`[Twilio] WhatsApp sent: ${message.sid}`);
     return { success: true, sid: message.sid };
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[Twilio] WhatsApp failed: ${msg}`);
+    logger.error(`[Twilio] WhatsApp failed: ${msg}`, error);
     return { success: false, error: msg };
   }
 }

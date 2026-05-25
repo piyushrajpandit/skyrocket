@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import Header from "../components/Header";
+import { useFetch } from "@/hooks/useFetch";
 
 interface BookingRecord {
   _id: string;
@@ -23,10 +24,13 @@ interface BookingRecord {
 export default function MyBookingsPage() {
   const { data: session, status } = useSession();
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState<string | null>(null);
+
+  const { data: bookingsData, loading, error: fetchError, retry: fetchBookings } = useFetch<BookingRecord[]>(
+    status === "authenticated" ? "/api/bookings/my" : null
+  );
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -35,28 +39,16 @@ export default function MyBookingsPage() {
   }, [status]);
 
   useEffect(() => {
-    if (status === "authenticated") {
-      fetchBookings();
+    if (bookingsData) {
+      setBookings(bookingsData);
     }
-  }, [status]);
+  }, [bookingsData]);
 
-  const fetchBookings = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/bookings/my");
-      const data = await res.json();
-      if (data.success) {
-        setBookings(data.data);
-      } else {
-        setError(data.error || "Failed to load bookings");
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError);
     }
-  };
+  }, [fetchError]);
 
   const handleCancelBooking = async (bookingId: string) => {
     setCancellingId(bookingId);

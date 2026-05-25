@@ -24,19 +24,22 @@ if (!global.mongooseCache) {
   global.mongooseCache = cached;
 }
 
-async function dbConnect(): Promise<typeof mongoose> {
+/**
+ * Connect to MongoDB with connection caching and pool limits.
+ * Preferred import name going forward.
+ */
+export async function connectDB(): Promise<typeof mongoose> {
   if (cached.conn) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    cached.promise = mongoose
+      .connect(MONGODB_URI, {
+        bufferCommands: false,
+        maxPoolSize: 10,
+      })
+      .then((m) => m);
   }
 
   try {
@@ -49,4 +52,6 @@ async function dbConnect(): Promise<typeof mongoose> {
   return cached.conn;
 }
 
+/** @deprecated Use connectDB() instead */
+const dbConnect = connectDB;
 export default dbConnect;

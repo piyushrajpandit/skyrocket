@@ -9,6 +9,11 @@ import {
   toGeminiTools,
 } from "@/lib/agent-tools";
 import { executeTool } from "@/lib/tool-executor";
+import { connectDB } from "@/lib/mongodb";
+import AgentStat from "@/lib/models/AgentStat";
+import { apiHandler } from "@/lib/apiHandler";
+import { agentMessageSchema, formatZodError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 60;
 
@@ -18,12 +23,28 @@ interface LogEntry {
   timestamp: number;
 }
 
+// Stats logger utility
+async function logAgentStat(provider: string, duration: number, success: boolean) {
+  try {
+    await connectDB();
+    await AgentStat.create({
+      provider: provider.toLowerCase(),
+      duration,
+      success,
+      timestamp: new Date(),
+    });
+  } catch (err) {
+    logger.error(`[Stats Logger] Failed to write stat for ${provider}`, err);
+  }
+}
+
 // ════════════════════════════════════════
 // Claude (Anthropic)
 // ════════════════════════════════════════
 async function handleClaude(userMessage: string) {
   const logs: LogEntry[] = [];
   const start = Date.now();
+  let bookingId: string | undefined = undefined;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -67,6 +88,10 @@ async function handleClaude(userMessage: string) {
         tb.input as Record<string, unknown>
       );
 
+      if (tb.name === "book_flight" && result.success && result.data) {
+        bookingId = (result.data as any).bookingId;
+      }
+
       logs.push({
         emoji: result.success ? "✅" : "❌",
         text: result.success
@@ -109,7 +134,7 @@ async function handleClaude(userMessage: string) {
     timestamp: Date.now() - start,
   });
 
-  return { reply, logs, duration: Date.now() - start };
+  return { reply, logs, duration: Date.now() - start, bookingId };
 }
 
 // ════════════════════════════════════════
@@ -118,6 +143,7 @@ async function handleClaude(userMessage: string) {
 async function handleOpenAI(userMessage: string) {
   const logs: LogEntry[] = [];
   const start = Date.now();
+  let bookingId: string | undefined = undefined;
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -143,6 +169,7 @@ async function handleOpenAI(userMessage: string) {
     messages.push(response.choices[0].message as OAIMessage);
 
     for (const tc of toolCalls) {
+      if (tc.type !== "function") continue;
       const args = JSON.parse(tc.function.arguments);
 
       logs.push({
@@ -152,6 +179,10 @@ async function handleOpenAI(userMessage: string) {
       });
 
       const result = await executeTool(tc.function.name, args);
+
+      if (tc.function.name === "book_flight" && result.success && result.data) {
+        bookingId = (result.data as any).bookingId;
+      }
 
       logs.push({
         emoji: result.success ? "✅" : "❌",
@@ -184,7 +215,7 @@ async function handleOpenAI(userMessage: string) {
     timestamp: Date.now() - start,
   });
 
-  return { reply, logs, duration: Date.now() - start };
+  return { reply, logs, duration: Date.now() - start, bookingId };
 }
 
 // ════════════════════════════════════════
@@ -193,6 +224,7 @@ async function handleOpenAI(userMessage: string) {
 async function handleGemini(userMessage: string) {
   const logs: LogEntry[] = [];
   const start = Date.now();
+  let bookingId: string | undefined = undefined;
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   const model = genAI.getGenerativeModel({
@@ -203,7 +235,7 @@ async function handleGemini(userMessage: string) {
   logs.push({ emoji: "🔵", text: "Gemini thinking...", timestamp: Date.now() - start });
 
   const chat = model.startChat({
-    tools: toGeminiTools(),
+    tools: toGeminiTools() as any,
   });
 
   let result = await chat.sendMessage(userMessage);
@@ -228,6 +260,10 @@ async function handleGemini(userMessage: string) {
         fc.name,
         (fc.args as Record<string, unknown>) || {}
       );
+
+      if (fc.name === "book_flight" && toolResult.success && toolResult.data) {
+        bookingId = (toolResult.data as any).bookingId;
+      }
 
       logs.push({
         emoji: toolResult.success ? "✅" : "❌",
@@ -258,123 +294,143 @@ async function handleGemini(userMessage: string) {
     timestamp: Date.now() - start,
   });
 
-  return { reply, logs, duration: Date.now() - start };
+  return { reply, logs, duration: Date.now() - start, bookingId };
 }
 
 // ════════════════════════════════════════
 // Unified POST handler
 // ════════════════════════════════════════
-export async function POST(request: NextRequest) {
-  try {
-    const { message, provider, race } = await request.json();
+export const POST = apiHandler(async (request: NextRequest) => {
+  const body = await request.json();
+  const validation = agentMessageSchema.safeParse(body);
 
-    if (!message) {
-      return NextResponse.json(
-        { success: false, error: "Message is required" },
-        { status: 400 }
-      );
-    }
-
-    // Race mode — run all 3 simultaneously
-    if (race) {
-      const providers = ["claude", "openai", "gemini"];
-      const results = await Promise.allSettled(
-        providers.map(async (p) => {
-          try {
-            switch (p) {
-              case "claude":
-                return { provider: p, ...(await handleClaude(message)) };
-              case "openai":
-                return { provider: p, ...(await handleOpenAI(message)) };
-              case "gemini":
-                return { provider: p, ...(await handleGemini(message)) };
-              default:
-                throw new Error("Unknown provider");
-            }
-          } catch (err) {
-            return {
-              provider: p,
-              reply: `Error: ${err instanceof Error ? err.message : "Failed"}`,
-              logs: [
-                {
-                  emoji: "❌",
-                  text: `${p} failed: ${err instanceof Error ? err.message : "Unknown"}`,
-                  timestamp: 0,
-                },
-              ],
-              duration: 0,
-            };
-          }
-        })
-      );
-
-      const raceResults = results.map((r) =>
-        r.status === "fulfilled"
-          ? r.value
-          : {
-              provider: "unknown",
-              reply: "Provider failed",
-              logs: [],
-              duration: 0,
-            }
-      );
-
-      return NextResponse.json({ success: true, race: true, results: raceResults });
-    }
-
-    // Single provider mode
-    const p = (provider || "claude").toLowerCase();
-    let result;
-
-    switch (p) {
-      case "claude":
-        if (!process.env.ANTHROPIC_API_KEY) {
-          return NextResponse.json(
-            { success: false, error: "ANTHROPIC_API_KEY not configured" },
-            { status: 500 }
-          );
-        }
-        result = await handleClaude(message);
-        break;
-      case "openai":
-        if (!process.env.OPENAI_API_KEY) {
-          return NextResponse.json(
-            { success: false, error: "OPENAI_API_KEY not configured" },
-            { status: 500 }
-          );
-        }
-        result = await handleOpenAI(message);
-        break;
-      case "gemini":
-        if (!process.env.GEMINI_API_KEY) {
-          return NextResponse.json(
-            { success: false, error: "GEMINI_API_KEY not configured" },
-            { status: 500 }
-          );
-        }
-        result = await handleGemini(message);
-        break;
-      default:
-        return NextResponse.json(
-          { success: false, error: `Unknown provider: ${p}` },
-          { status: 400 }
-        );
-    }
-
-    return NextResponse.json({
-      success: true,
-      provider: p,
-      reply: result.reply,
-      logs: result.logs,
-      duration: result.duration,
-    });
-  } catch (error) {
-    console.error("[Agent API] Error:", error);
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
+  if (!validation.success) {
     return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
+      { success: false, error: formatZodError(validation.error) },
+      { status: 400 }
     );
   }
-}
+
+  const { message, provider, race } = validation.data;
+
+  // Race mode — run all 3 simultaneously
+  if (race) {
+    const providers = ["claude", "openai", "gemini"];
+    const results = await Promise.allSettled(
+      providers.map(async (p) => {
+        try {
+          let res;
+          switch (p) {
+            case "claude":
+              res = { provider: p, ...(await handleClaude(message)) };
+              break;
+            case "openai":
+              res = { provider: p, ...(await handleOpenAI(message)) };
+              break;
+            case "gemini":
+              res = { provider: p, ...(await handleGemini(message)) };
+              break;
+            default:
+              throw new Error("Unknown provider");
+          }
+          await logAgentStat(p, res.duration, true);
+          return res;
+        } catch (err) {
+          await logAgentStat(p, 0, false);
+          return {
+            provider: p,
+            reply: `Error: ${err instanceof Error ? err.message : "Failed"}`,
+            logs: [
+              {
+                emoji: "❌",
+                text: `${p} failed: ${err instanceof Error ? err.message : "Unknown"}`,
+                timestamp: 0,
+              },
+            ],
+            duration: 0,
+          };
+        }
+      })
+    );
+
+    const raceResults = results.map((r) =>
+      r.status === "fulfilled"
+        ? r.value
+        : {
+            provider: "unknown",
+            reply: "Provider failed",
+            logs: [],
+            duration: 0,
+          }
+    );
+
+    return NextResponse.json({ success: true, race: true, results: raceResults });
+  }
+
+  // Single provider mode
+  const p = (provider || "claude").toLowerCase();
+  let result;
+
+  switch (p) {
+    case "claude":
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return NextResponse.json(
+          { success: false, error: "ANTHROPIC_API_KEY not configured" },
+          { status: 500 }
+        );
+      }
+      try {
+        result = await handleClaude(message);
+        await logAgentStat(p, result.duration, true);
+      } catch (err) {
+        await logAgentStat(p, 0, false);
+        throw err;
+      }
+      break;
+    case "openai":
+      if (!process.env.OPENAI_API_KEY) {
+        return NextResponse.json(
+          { success: false, error: "OPENAI_API_KEY not configured" },
+          { status: 500 }
+        );
+      }
+      try {
+        result = await handleOpenAI(message);
+        await logAgentStat(p, result.duration, true);
+      } catch (err) {
+        await logAgentStat(p, 0, false);
+        throw err;
+      }
+      break;
+    case "gemini":
+      if (!process.env.GEMINI_API_KEY) {
+        return NextResponse.json(
+          { success: false, error: "GEMINI_API_KEY not configured" },
+          { status: 500 }
+        );
+      }
+      try {
+        result = await handleGemini(message);
+        await logAgentStat(p, result.duration, true);
+      } catch (err) {
+        await logAgentStat(p, 0, false);
+        throw err;
+      }
+      break;
+    default:
+      return NextResponse.json(
+        { success: false, error: `Unknown provider: ${p}` },
+        { status: 400 }
+      );
+  }
+
+  return NextResponse.json({
+    success: true,
+    provider: p,
+    reply: result.reply,
+    logs: result.logs,
+    duration: result.duration,
+    bookingId: result.bookingId,
+  });
+});
+

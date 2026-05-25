@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Flight } from "@/lib/flights";
+import { logger } from "@/lib/logger";
+
 
 /* ── Airline badge colors ── */
 const airlineColors: Record<string, { bg: string; text: string; accent: string }> = {
@@ -51,7 +53,7 @@ export default function SearchSection() {
       }
     } catch {
       // Fallback to hardcoded flights
-      console.log("[Search] Falling back to hardcoded flights");
+      logger.info("[Search] Falling back to hardcoded flights");
       try {
         const fallbackRes = await fetch("/api/flights");
         const fallbackData = await fallbackRes.json();

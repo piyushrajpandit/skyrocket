@@ -1,53 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
+import { apiHandler } from "@/lib/apiHandler";
+import { createOrderSchema, formatZodError } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
-export async function POST(request: NextRequest) {
-  try {
-    const { amount, currency = "INR", receipt } = await request.json();
+export const POST = apiHandler(async (request: NextRequest) => {
+  const body = await request.json();
+  const parsed = createOrderSchema.safeParse(body);
 
-    if (!amount || amount <= 0) {
-      return NextResponse.json(
-        { success: false, error: "Invalid amount" },
-        { status: 400 }
-      );
-    }
-
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-
-    if (!keyId || !keySecret) {
-      return NextResponse.json(
-        { success: false, error: "Razorpay credentials not configured" },
-        { status: 500 }
-      );
-    }
-
-    const razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    });
-
-    const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // Convert to paise
-      currency,
-      receipt: receipt || `skymock_${Date.now()}`,
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-      },
-    });
-  } catch (error: unknown) {
-    console.error("[Razorpay] Order creation failed:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to create payment order";
+  if (!parsed.success) {
     return NextResponse.json(
-      { success: false, error: message },
+      {
+        success: false,
+        error: formatZodError(parsed.error),
+        code: "VALIDATION_ERROR",
+      },
+      { status: 400 }
+    );
+  }
+
+  const { amount, currency, receipt } = parsed.data;
+
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!keyId || !keySecret) {
+    return NextResponse.json(
+      { success: false, error: "Razorpay credentials not configured", code: "CONFIG_ERROR" },
       { status: 500 }
     );
   }
-}
+
+  const razorpay = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+
+  const order = await razorpay.orders.create({
+    amount: Math.round(amount * 100), // Convert to paise
+    currency,
+    receipt: receipt || `skymock_${Date.now()}`,
+  });
+
+  logger.info("Razorpay order created", { orderId: order.id });
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    },
+    message: "Payment order created",
+  });
+});

@@ -1,5 +1,6 @@
-import dbConnect from "@/lib/mongodb";
+import { connectDB } from "@/lib/mongodb";
 import User from "@/lib/models/User";
+import { logger } from "@/lib/logger";
 
 /**
  * Award points to a user and record the action in their history.
@@ -9,7 +10,7 @@ export async function awardPoints(
   action: string,
   points: number
 ) {
-  await dbConnect();
+  await connectDB();
   const user = await User.findOneAndUpdate(
     { email: email.toLowerCase() },
     {
@@ -25,7 +26,7 @@ export async function awardPoints(
     { new: true }
   );
   if (user) {
-    console.log(
+    logger.info(
       `[Points] +${points} to ${email} for "${action}" (total: ${user.points})`
     );
   }
@@ -41,7 +42,7 @@ export async function deductPoints(
   points: number,
   reason: string
 ) {
-  await dbConnect();
+  await connectDB();
   const user = await User.findOne({ email: email.toLowerCase() });
 
   if (!user || user.points < points) {
@@ -56,7 +57,7 @@ export async function deductPoints(
   });
   await user.save();
 
-  console.log(
+  logger.info(
     `[Points] -${points} from ${email} for "${reason}" (total: ${user.points})`
   );
   return user;
@@ -66,7 +67,7 @@ export async function deductPoints(
  * Get a user's points balance and history.
  */
 export async function getPointsBalance(email: string) {
-  await dbConnect();
+  await connectDB();
   const user = await User.findOne({ email: email.toLowerCase() }).select(
     "points pointsHistory"
   );
@@ -100,7 +101,7 @@ export function generateReferralCode(name: string): string {
  * Award referral bonus when a referred user completes their first booking.
  */
 export async function processReferralBonus(bookerEmail: string) {
-  await dbConnect();
+  await connectDB();
 
   const booker = await User.findOne({ email: bookerEmail.toLowerCase() });
   if (!booker?.referredBy) return;
@@ -125,7 +126,7 @@ export async function processReferralBonus(bookerEmail: string) {
     `Referral booking by ${booker.name}`,
     500
   );
-  console.log(
+  logger.info(
     `[Referral] +500 to ${referrer.email} for ${bookerEmail}'s first booking`
   );
 }

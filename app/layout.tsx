@@ -4,6 +4,10 @@ import "./globals.css";
 import DemoBanner from "./components/DemoBanner";
 import SessionProvider from "./components/SessionProvider";
 import ToastProvider from "./components/ToastProvider";
+import { validateEnv } from "@/lib/env";
+
+// Validate environment variables at startup
+validateEnv();
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

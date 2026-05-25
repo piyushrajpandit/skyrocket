@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
+import { apiHandler } from "@/lib/apiHandler";
+import { logger } from "@/lib/logger";
 
 /* ── City name → IATA code mapping ── */
 const cityToIATA: Record<string, string> = {
@@ -97,7 +99,7 @@ function calcDuration(dep: string | null, arr: string | null): string {
   }
 }
 
-export async function GET(request: NextRequest) {
+export const GET = apiHandler(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const depCity = searchParams.get("dep") || "";
   const arrCity = searchParams.get("arr") || "";
@@ -171,10 +173,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: flights, source: "aviationstack" });
   } catch (error) {
-    console.error("[Aviationstack] API call failed:", error instanceof Error ? error.message : error);
+    logger.error("[Aviationstack] API call failed", error);
     return NextResponse.json(
       { success: false, error: "Aviationstack API failed", fallback: true },
       { status: 502 }
     );
   }
-}
+});

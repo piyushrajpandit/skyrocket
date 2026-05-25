@@ -4,42 +4,30 @@ import { useSession, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import Header from "../components/Header";
+import { useFetch } from "@/hooks/useFetch";
+
+interface ReferralData {
+  referralCode: string;
+  referralCount: number;
+  referralPoints: number;
+}
 
 export default function ReferPage() {
   const { status } = useSession();
-  const [referralCode, setReferralCode] = useState("");
-  const [referralCount, setReferralCount] = useState(0);
-  const [referralPoints, setReferralPoints] = useState(0);
-  const [loading, setLoading] = useState(true);
+
+  const { data, loading } = useFetch<ReferralData>(
+    status === "authenticated" ? "/api/user/referral" : null
+  );
+
+  const referralCode = data?.referralCode ?? "";
+  const referralCount = data?.referralCount ?? 0;
+  const referralPoints = data?.referralPoints ?? 0;
 
   useEffect(() => {
     if (status === "unauthenticated") {
       signIn("google", { callbackUrl: "/refer" });
     }
   }, [status]);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchReferralData();
-    }
-  }, [status]);
-
-  const fetchReferralData = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/user/referral");
-      const data = await res.json();
-      if (data.success) {
-        setReferralCode(data.data.referralCode);
-        setReferralCount(data.data.referralCount);
-        setReferralPoints(data.data.referralPoints);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const shareLink = `https://skymock.vercel.app/signup?ref=${referralCode}`;
 

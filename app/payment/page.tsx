@@ -6,6 +6,7 @@ import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import Script from "next/script";
 import toast from "react-hot-toast";
+import { useFetch } from "@/hooks/useFetch";
 
 interface BookingData {
   name: string;
@@ -82,18 +83,18 @@ export default function PaymentPage() {
     }
   }, []);
 
-  // Fetch points balance
+  // Points fetch using hook
+  const { data: pointsData, loading: pointsFetchLoading } = useFetch<{ points: number }>(
+    status === "authenticated" ? "/api/user/points" : null
+  );
+
   useEffect(() => {
-    if (status === "authenticated") {
-      fetch("/api/user/points")
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.success) setPointsBalance(data.data.points);
-        })
-        .catch(() => {})
-        .finally(() => setPointsLoading(false));
+    if (pointsData) {
+      setPointsBalance(pointsData.points);
+      setPointsLoading(false);
     }
-  }, [status]);
+  }, [pointsData]);
+
 
   // Compute points discount
   const maxPointsDiscount = booking

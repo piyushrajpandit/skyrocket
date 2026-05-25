@@ -21,6 +21,8 @@ import {
   Legend,
 } from "recharts";
 import Header from "../components/Header";
+import { useFetch } from "@/hooks/useFetch";
+import { logger } from "@/lib/logger";
 
 interface BookingRecord {
   _id: string;
@@ -41,12 +43,15 @@ const PIE_COLORS = ["#4ade80", "#facc15", "#f87171"];
 export default function AdminPage() {
   const { status: authStatus } = useSession();
   const router = useRouter();
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [loading, setLoading] = useState(true);
   const [authChecking, setAuthChecking] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  const { data: bookingsData, loading, error: fetchError, retry: fetchBookings } = useFetch<BookingRecord[]>(
+    authChecking ? null : "/api/bookings"
+  );
+  const bookings = bookingsData || [];
+  const error = fetchError || "";
 
   // Admin auth check
   useEffect(() => {
@@ -54,12 +59,13 @@ export default function AdminPage() {
       try {
         const res = await fetch("/api/admin/verify");
         const data = await res.json();
-        if (!data.authorized) {
+        if (!data.success || !data.data?.authorized) {
           toast.error("🚫 Access Denied — Admin only");
           router.push("/");
           return;
         }
-      } catch {
+      } catch (err) {
+        logger.error("Failed to verify admin access", err);
         toast.error("Failed to verify admin access");
         router.push("/");
         return;
@@ -77,27 +83,6 @@ export default function AdminPage() {
     }
   }, [authStatus, router]);
 
-  const fetchBookings = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/bookings");
-      const data = await res.json();
-      if (data.success) {
-        setBookings(data.data);
-      } else {
-        setError(data.error || "Failed to load bookings");
-      }
-    } catch {
-      setError("Failed to connect to database.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!authChecking) fetchBookings();
-  }, [authChecking]);
 
   // === Computed data ===
   const stats = useMemo(() => {
@@ -227,7 +212,7 @@ export default function AdminPage() {
               📥 Export CSV
             </button>
             <button
-              onClick={() => { setLoading(true); setError(""); fetchBookings(); }}
+              onClick={fetchBookings}
               className="rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)] px-4 py-2 text-sm font-medium text-[var(--foreground)] hover:border-green-400/30 transition-colors"
               aria-label="Refresh data"
             >
@@ -323,7 +308,7 @@ export default function AdminPage() {
                   <Tooltip
                     contentStyle={{ background: "#16161e", border: "1px solid #2a2a3a", borderRadius: 8, fontSize: 12 }}
                     labelStyle={{ color: "#888" }}
-                    formatter={(value: number) => [`₹${value.toLocaleString("en-IN")}`, "Revenue"]}
+                    formatter={(value: any) => [`₹${Number(value || 0).toLocaleString("en-IN")}`, "Revenue"]}
                   />
                   <Bar dataKey="revenue" fill="#4ade80" radius={[4, 4, 0, 0]} />
                 </BarChart>

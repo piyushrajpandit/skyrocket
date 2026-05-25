@@ -5,6 +5,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 import type { Flight } from "@/lib/flights";
+import { useFetch } from "@/hooks/useFetch";
 
 function BookingForm() {
   const searchParams = useSearchParams();
@@ -13,12 +14,13 @@ function BookingForm() {
   const flightId = searchParams.get("flightId");
 
   const [flight, setFlight] = useState<Flight | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [seat, setSeat] = useState("Window");
+
+  const { data: flightsData, loading } = useFetch<Flight[]>(flightId ? "/api/flights" : null);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -36,23 +38,11 @@ function BookingForm() {
   }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    async function fetchFlight() {
-      try {
-        const res = await fetch("/api/flights");
-        const data = await res.json();
-        const found = data.data.find(
-          (f: Flight) => f.id === flightId
-        );
-        setFlight(found || null);
-      } catch {
-        setFlight(null);
-      } finally {
-        setLoading(false);
-      }
+    if (flightsData && flightId) {
+      const found = flightsData.find((f: Flight) => f.id === flightId);
+      setFlight(found || null);
     }
-    if (flightId) fetchFlight();
-    else setLoading(false);
-  }, [flightId]);
+  }, [flightsData, flightId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
